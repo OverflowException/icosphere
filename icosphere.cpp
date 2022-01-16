@@ -2,62 +2,55 @@
 #include <vector>
 #include <cmath>
 #include <sstream>
+#include <fstream>
+
+#include "glm/glm.hpp"
+
+typedef std::vector<glm::vec3> PositionBuffer;
+typedef std::vector<glm::vec3> IndexBuffer;
+typedef std::vector<glm::vec3> NormalBuffer;
 
 struct Vertex {
-    float x;
-    float y;
-    float z;
+    glm::vec3 position;
+    glm::vec3 normal;
 };
-typedef std::vector<Vertex> VertexBuffer;
+typedef std::vector<Vertex> VertexArray;
 
-struct Triangle {
-    size_t i0;
-    size_t i1;
-    size_t i2;
-};
-typedef std::vector<Triangle> IndexBuffer;
-
-Vertex extrusion(float r, const Vertex& v0, const Vertex& v1) {
-    float x, y, z;
-    x = (v0.x + v1.x) / 2;
-    y = (v0.y + v1.y) / 2;
-    z = (v0.z + v1.z) / 2;
-    
-    float ratio = r / std::sqrt((x * x + y * y + z * z));
-
-    return Vertex {x * ratio, y * ratio, z * ratio};
+glm::vec3 extrusion(float r, const glm::vec3& p0, const glm::vec3& p1) {
+    glm::vec3 mid = (p0 + p1) * 0.5f;
+    return r * glm::normalize(mid);
 }
 
 // return vertex buffer and index buffer
 void init_ico(float r,
-              VertexBuffer& vb,
+              PositionBuffer& pb,
               IndexBuffer& ib) {
-    vb.clear();
+    pb.clear();
     ib.clear();
     
     // top-most
-    vb.push_back({0.0, 0.0, r});
+    pb.push_back(glm::vec3(0.0f, 0.0f, r));
 
     // top layer
     float z = std::sin(std::atan(0.5));
     float xy = std::cos(std::atan(0.5));
     for (int i = 0; i < 5; ++i) {
-        vb.push_back({
-                float(xy * std::cos(72.0 * i)),
-                float(xy * std::sin(72.0 * i)),
-                z});
+        pb.push_back(glm::vec3(
+                float(xy * std::cos(glm::radians(72.0 * i))),
+                float(xy * std::sin(glm::radians(72.0 * i))),
+                z));
     }
     
     // bottom layer
     for (int i = 0; i < 5; ++i) {
-        vb.push_back({
-                float(xy * std::cos(36.0 + 72.0 * i)),
-                float(xy * std::sin(36.0 + 72.0 * i)),
-                -z});
+        pb.push_back(glm::vec3(
+                float(xy * std::cos(glm::radians(36.0 + 72.0 * i))),
+                float(xy * std::sin(glm::radians(36.0 + 72.0 * i))),
+                -z));
     }
     
     // bottom-most
-    vb.push_back({0.0, 0.0, -r});
+    pb.push_back(glm::vec3(0.0f, 0.0f, -r));
 
     // construct triangles
     // the 'roof'
@@ -85,34 +78,34 @@ void init_ico(float r,
 }
 
 void add_ico_level(float r,
-                   VertexBuffer& vb,
+                   PositionBuffer& pb,
                    IndexBuffer& ib) {
     // traverse triangles
     IndexBuffer ib_new;
     for (size_t k = 0; k < ib.size(); ++k) {
-        Triangle i = ib[k];
+        glm::vec3& i = ib[k];
 
-        Vertex v0 = vb[i.i0];
-        Vertex v1 = vb[i.i1];
-        Vertex v2 = vb[i.i2];
+        glm::vec3 p0 = pb[i.x];
+        glm::vec3 p1 = pb[i.y];
+        glm::vec3 p2 = pb[i.z];
         
-        Vertex v01 = extrusion(r, v0, v1);
-        Vertex v12 = extrusion(r, v1, v2);
-        Vertex v20 = extrusion(r, v2, v0);
+        glm::vec3 p01 = extrusion(r, p0, p1);
+        glm::vec3 p12 = extrusion(r, p1, p2);
+        glm::vec3 p20 = extrusion(r, p2, p0);
         
         // add new vertices to vb
-        vb.push_back(v01);
-        vb.push_back(v12);
-        vb.push_back(v20);
+        pb.push_back(p01);
+        pb.push_back(p12);
+        pb.push_back(p20);
         
         // add new indices
-        size_t pos01 = vb.size() - 3;
-        size_t pos12 = vb.size() - 2;
-        size_t pos20 = vb.size() - 1;
-        ib_new.push_back({i.i0, pos01, pos20});
-        ib_new.push_back({i.i1, pos12, pos01});
-        ib_new.push_back({i.i2, pos20, pos12});
-        ib_new.push_back({pos20, pos01, pos12});
+        size_t pos01 = pb.size() - 3;
+        size_t pos12 = pb.size() - 2;
+        size_t pos20 = pb.size() - 1;
+        ib_new.push_back(glm::vec3(i.x, pos01, pos20));
+        ib_new.push_back(glm::vec3(i.y, pos12, pos01));
+        ib_new.push_back(glm::vec3(i.z, pos20, pos12));
+        ib_new.push_back(glm::vec3(pos20, pos01, pos12));
     }
 
     ib.clear();
@@ -133,12 +126,54 @@ int main(int argc, char** argv) {
     iss.str(argv[2]);
     iss >> level;
     
-    VertexBuffer vb;
+    PositionBuffer pb;
     IndexBuffer ib;
-    init_ico(radius, vb, ib);
+    init_ico(radius, pb, ib);
     for (int l = 0; l < level; ++l) {
-        add_ico_level(radius, vb, ib);
+        add_ico_level(radius, pb, ib);
     }
-    
+
+    std::ofstream ofs;
+    ofs.open("ico_pos.data");
+    for (const auto& p : pb) {
+        ofs << p.x << " " << p.y << " " << p.z << std::endl;
+    }
+    ofs.close();
+
+    ofs.open("ico_index.data");
+    for (const auto& i : ib) {
+        ofs << i.x << " " << i.y << " " << i.z << std::endl;
+    }
+    ofs.close();
+
+    // generate normals with position buffer and index buffer
+    NormalBuffer nb;
+    VertexArray va;
+    for (const auto& i : ib) {
+        const glm::vec3& p0 = pb[i.x];
+        const glm::vec3& p1 = pb[i.y];
+        const glm::vec3& p2 = pb[i.z];
+
+        const glm::vec3& n0 = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+        const glm::vec3& n1 = glm::normalize(glm::cross(p2 - p1, p0 - p1));
+        const glm::vec3& n2 = glm::normalize(glm::cross(p0 - p2, p1 - p2));
+
+        nb.push_back(n0);
+        nb.push_back(n1);
+        nb.push_back(n2);
+
+        va.push_back({p0, n0});
+        va.push_back({p1, n1});
+        va.push_back({p2, n2});
+    }
+
+    ofs.open("ico_vertex.data");
+    for (const auto& v : va) {
+        ofs << v.position.x << " " << v.position.y << " " << v.position.z << " "
+            << v.normal.x << " " << v.normal.y << " " << v.normal.z << " "
+            << std::endl;
+    }
+    ofs.close();
+
     return 0;
 }
