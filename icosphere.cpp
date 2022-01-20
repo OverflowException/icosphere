@@ -6,20 +6,7 @@
 
 #include "glm/glm.hpp"
 
-typedef std::vector<glm::vec3> PositionBuffer;
-typedef std::vector<glm::vec3> IndexBuffer;
-typedef std::vector<glm::vec3> NormalBuffer;
-
-struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-};
-typedef std::vector<Vertex> VertexArray;
-
-glm::vec3 extrusion(float r, const glm::vec3& p0, const glm::vec3& p1) {
-    glm::vec3 mid = (p0 + p1) * 0.5f;
-    return r * glm::normalize(mid);
-}
+#include "primitives.hpp"
 
 // return vertex buffer and index buffer
 void init_ico(float r,
@@ -133,45 +120,28 @@ int main(int argc, char** argv) {
         add_ico_level(radius, pb, ib);
     }
 
+    // position attribute
     std::ofstream ofs;
-    ofs.open("ico_pos.data");
+    ofs.open("./data/ico_pos.data");
     for (const auto& p : pb) {
         ofs << p.x << " " << p.y << " " << p.z << std::endl;
     }
     ofs.close();
 
-    ofs.open("ico_index.data");
-    for (const auto& i : ib) {
-        ofs << i.x << " " << i.y << " " << i.z << std::endl;
+    // normal attribute
+    ofs.open("./data/ico_norm.data");
+    for(const auto& p: pb) {
+        glm::vec3 normal = glm::normalize(p);
+        ofs << normal.x << " " << normal.y << " " << normal.z << std::endl;
     }
     ofs.close();
 
-    // generate normals with position buffer and index buffer
-    NormalBuffer nb;
-    VertexArray va;
+    // TODO: texture uv attribute
+
+    // write indices
+    ofs.open("./data/ico_index.data");
     for (const auto& i : ib) {
-        const glm::vec3& p0 = pb[i.x];
-        const glm::vec3& p1 = pb[i.y];
-        const glm::vec3& p2 = pb[i.z];
-
-        const glm::vec3& n0 = glm::normalize(glm::cross(p1 - p0, p2 - p0));
-        const glm::vec3& n1 = glm::normalize(glm::cross(p2 - p1, p0 - p1));
-        const glm::vec3& n2 = glm::normalize(glm::cross(p0 - p2, p1 - p2));
-
-        nb.push_back(n0);
-        nb.push_back(n1);
-        nb.push_back(n2);
-
-        va.push_back({p0, n0});
-        va.push_back({p1, n1});
-        va.push_back({p2, n2});
-    }
-
-    ofs.open("ico_vertex.data");
-    for (const auto& v : va) {
-        ofs << v.position.x << " " << v.position.y << " " << v.position.z << " "
-            << v.normal.x << " " << v.normal.y << " " << v.normal.z << " "
-            << std::endl;
+        ofs << i.x << " " << i.y << " " << i.z << std::endl;
     }
     ofs.close();
 
